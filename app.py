@@ -55,7 +55,7 @@ def new_user():
     name = request.json.get('name')
     email = request.json.get('email')
     password = request.json.get('password')
-    is_teacher = request.json.get('is_teacher')
+    is_teacher = request.json.get('isTeacher')
     if email is None or password is None:
         abort(400) # missing arguments
     if User.query.filter_by(email = email).first() is not None:
