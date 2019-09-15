@@ -1,9 +1,13 @@
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from flask_httpauth import HTTPBasicAuth
 from passlib.apps import custom_app_context as pwd_context
+import json
 import os
+import random
+import string
+import base64
 
 #Init app
 app = Flask(__name__)
@@ -15,9 +19,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 #Init db
 db = SQLAlchemy(app)
-
 #Init ma
 ma = Marshmallow(app)
+
 
 #Product
 results = db.Table('results',
@@ -27,7 +31,6 @@ results = db.Table('results',
     )
 
 class User(db.Model):
-    """docstring for Product."""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
@@ -44,11 +47,18 @@ class User(db.Model):
 
 class Test(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    titile = db.Column(db.String(100), nullable=False)
+    title = db.Column(db.String(100), nullable=False)
     path = db.Column(db.String(1000), nullable=False)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     max_score = db.Column(db.Integer, nullable=False)
     max_time = db.Column(db.Integer, nullable=True)
+
+class TestSchema(ma.ModelSchema):
+    class Meta:
+        fields = ("id", "title", "created_by", "max_score", "max_time")
+
+test_schema = TestSchema()
+tests_scema = TestSchema(many=True)
 
 @app.route('/api/users', methods = ['POST'])
 def new_user():
@@ -64,7 +74,7 @@ def new_user():
     user.hash_password(password)
     db.session.add(user)
     db.session.commit()
-    return jsonify({ 'email': user.email, "status" : "success" })
+    return jsonify({"id": user.id, 'email': user.email, "status" : "success" })
 
 @auth.verify_password
 def verify_password(email, password):
@@ -74,25 +84,90 @@ def verify_password(email, password):
     g.user = user
     return True
 
-@app.route('/api/dashboard/')
+@app.route('/api/tests')
 @auth.login_required
 def get_dashboard():
-    # tests = Test.query.all();
-    # results = auth.results
-    # if auth.is_teacher:
+    user = User.query.filter_by(email = auth.username()).first()
+    all_tests = [test_schema.dump(test) for test in Test.query.all()]
+    teacher_tests = [test_schema.dump(test) for test in user.tests.all()]
+    if user.is_teacher:
+        response = {
+            "email": user.email,
+            "tests": teacher_tests,
+            "isTeacher": 1
+        } 
+    else:
+        response = {
+            "email": user.email,
+            "tests": all_tests,
+            "isTeacher": 0
+        }
+    return jsonify(response)
 
-    return jsonify({ 'status':"success" })
+
+@app.route('/api/addTest', methods=["POST"])
+@auth.login_required
+def add_test():
+    title = request.json.get("title")
+    test_file = base64.b64decode(request.json.get("file"))
+    path = put_test_file(test_file)
+    max_score = get_max_score(path)
+    max_time  = request.json.get("max_time") if request.json.get("max_time") else None
+    user = User.query.filter_by(email = auth.username()).first()
+
+    test = Test(title=title, path=path, max_score=max_score, max_time=max_time, created_by=user.id)
+    db.session.add(test)
+    db.session.commit()
+    return jsonify({"title": title, "created_by": user.id, "path": test.path})
+
+def get_max_score(path):
+    f = open(path, 'r')
+    num_lines = sum(1 for line in open(path))
+    return num_lines
+
+def put_test_file(bin):
+    s = string.ascii_lowercase+string.digits
+    name = ''.join(random.sample(s,10))
+    name+='.csv'
+    path = os.path.dirname(os.path.abspath(__file__))
+    new_file_path = os.path.join(path, name)
+    f = open(new_file_path, 'wb')
+    f.write(bin)
+    f.close()
+    return new_file_path
+
+def create_json(path):
+    f = open(path, 'r')
+    questions = []
+    for line in f.readlines():
+        line = line.replace("\n", "")
+        print(line)
+        arr = line.split(';')
+        print(arr)
+        quest = arr[0]
+        answers = []
+        for i in range(1, 5):
+            is_right = True if int(arr[5]) == i else False
+            answers.append({
+                "answer" : arr[i],
+                "isRight": is_right
+            })
+        img = arr[6]
+        questions.append({
+            "question" : quest,
+            "answers": answers,
+            "img": img
+        })
+    f.close()
+    return questions
 
 
-
-# class UserSchema(ma.Schema):
-#     class Meta:
-#         fields = ('id', 'name', 'email', 'password')
-#
-# #Init Schema
-# user_schema = UserSchema()
-# users_schema =  UserSchema(many=True)
-
+@app.route('/api/tests/<int:test_id>')
+@auth.login_required
+def get_test(test_id):
+    test = Test.query.filter_by(id=test_id).first()
+    return jsonify(create_json(test.path))
+    
 
 #Run server
 if __name__ == '__main__':
