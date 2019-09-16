@@ -112,7 +112,7 @@ def add_test():
     test_file = base64.b64decode(request.json.get("file"))
     path = put_test_file(test_file)
     max_score = get_max_score(path)
-    max_time  = request.json.get("max_time") if request.json.get("max_time") else None
+    max_time  = request.json.get("maxTime") if request.json.get("maxTime") else None
     user = User.query.filter_by(email = auth.username()).first()
 
     test = Test(title=title, path=path, max_score=max_score, max_time=max_time, created_by=user.id)
