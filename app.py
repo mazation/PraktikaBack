@@ -105,7 +105,7 @@ def get_dashboard():
     return jsonify(response)
 
 
-@app.route('/api/addTest', methods=["POST"])
+@app.route('/api/tests/create', methods=["POST"])
 @auth.login_required
 def add_test():
     title = request.json.get("title")
