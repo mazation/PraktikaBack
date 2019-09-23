@@ -67,9 +67,9 @@ def new_user():
     password = request.json.get('password')
     is_teacher = request.json.get('isTeacher')
     if email is None or password is None:
-        abort(400) # missing arguments
+        abort(400) 
     if User.query.filter_by(email = email).first() is not None:
-        abort(400) # existing user
+        abort(400) 
     user = User(name = name, email = email, is_teacher = is_teacher)
     user.hash_password(password)
     db.session.add(user)
@@ -93,12 +93,14 @@ def get_dashboard():
     if user.is_teacher:
         response = {
             "email": user.email,
+            "isTeacher": True,
             "tests": teacher_tests,
             "isTeacher": 1
         } 
     else:
         response = {
             "email": user.email,
+            "isTeacher": False,
             "tests": all_tests,
             "isTeacher": 0
         }
@@ -159,7 +161,7 @@ def create_json(path):
             "img": img
         })
     f.close()
-    return questions
+    return {"questions": questions}
 
 
 @app.route('/api/tests/<int:test_id>')
