@@ -188,7 +188,9 @@ def create_json(path):
 @auth.login_required
 def get_test(test_id):
     test = Test.query.filter_by(id=test_id).first()
-    return jsonify(create_json(test.path))
+    response = {"maxTime": test.max_time}
+    response.update(create_json(test.path))
+    return jsonify(response)
 
 @app.route('/api/results', methods=["POST", "GET"])
 @auth.login_required
