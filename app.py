@@ -23,12 +23,14 @@ db = SQLAlchemy(app)
 ma = Marshmallow(app)
 
 
-#Product
-results = db.Table('results',
-        db.Column('user_id', db.Integer, db.ForeignKey('user.id')),
-        db.Column('test_id', db.Integer, db.ForeignKey('test.id')),
-        db.Column('score', db.Integer, nullable=False)
-    )
+class Result(db.Model):
+    id = db.Column('id', db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    test_id = db.Column(db.Integer, db.ForeignKey('test.id'))
+    score = db.Column(db.Integer, nullable=False)
+
+    user = db.relationship('User', back_populates="finished_tests")
+    finished_test = db.relationship('Test', back_populates="students")
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -37,8 +39,7 @@ class User(db.Model):
     password = db.Column(db.String(255))
     is_teacher = db.Column(db.Integer, nullable=False)
     tests = db.relationship('Test', backref=db.backref('author', lazy=True), lazy='dynamic')
-    resutls = db.relationship('Test', secondary=results, backref=db.backref('students', lazy='dynamic'))
-
+    finished_tests = db.relationship('Result', back_populates="user")
     def hash_password(self, password):
         self.password = pwd_context.encrypt(password)
 
@@ -52,6 +53,7 @@ class Test(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     max_score = db.Column(db.Integer, nullable=False)
     max_time = db.Column(db.Integer, nullable=True)
+    students = db.relationship('Result', back_populates="finished_test")
 
 class TestSchema(ma.ModelSchema):
     class Meta:
@@ -59,6 +61,24 @@ class TestSchema(ma.ModelSchema):
 
 test_schema = TestSchema()
 tests_scema = TestSchema(many=True)
+
+class ResultSchema(ma.ModelSchema):
+    class Meta:
+        model = Result
+        fields = ('id', 'finished_test.title', 'score', 'user.name')
+
+result_schema = ResultSchema()
+results_schema = ResultSchema(many=True)
+
+class UserSchema(ma.ModelSchema):
+    results = ma.Nested(ResultSchema, many=True)
+    class Meta:
+        model = User
+
+user_schema = UserSchema()
+users_schema = UserSchema(many=True)
+
+
 
 @app.route('/api/users', methods = ['POST'])
 def new_user():
@@ -169,7 +189,29 @@ def create_json(path):
 def get_test(test_id):
     test = Test.query.filter_by(id=test_id).first()
     return jsonify(create_json(test.path))
-    
+
+@app.route('/api/results', methods=["POST", "GET"])
+@auth.login_required
+def results():
+    if request.method == 'POST':
+        user = User.query.filter_by(email = auth.username()).first()
+        test_id = request.json.get('testId')
+        result = Result(score = request.json.get('score'))
+        test = Test.query.filter_by(id=test_id).first()
+        result.finished_test = test
+        user.finished_tests.append(result)
+        db.session.add(user)
+        db.session.commit()
+        return jsonify({"message": "success"})
+    else:
+        teacher = User.query.filter_by(email = auth.username(), is_teacher=1).first()
+        if teacher is None:
+            return jsonify({"message": "Пользователь не является учителем"})
+        
+        results = [results_schema.dump(Result.query.filter_by(test_id=test.id)) for test in teacher.tests]
+        response = {"results": results}
+        return jsonify(response)
+
 
 #Run server
 if __name__ == '__main__':
