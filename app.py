@@ -170,7 +170,7 @@ def create_json(path):
         answers = []
         for i in range(1, 5):
             is_right = True if int(arr[5]) == i else False
-            if arr[i]:
+            if arr[i] is not '':
                 answers.append({
                 "answer" : arr[i],
                 "isRight": is_right
