@@ -69,7 +69,6 @@ tests_scema = TestSchema(many=True)
 
 #Объявляем схему сериализации для пользователя с полями для отправки на фронтенд
 class UserSchema(ma.ModelSchema):
-    results = ma.Nested(ResultSchema, many=True)
     class Meta:
         model = User
 
